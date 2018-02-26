@@ -1,0 +1,57 @@
+---
+- name: Create MySQL database for laravel
+  mysql_db: name=laravel state=present
+
+- name: Create MySQL user for laravel
+  mysql_user: name=laravel password=laravel priv=*.*:ALL state=present
+
+- name: Clone Laravel quickstart application
+  git: repo=https://github.com/laravel/quickstart-basic
+       dest=/vagrant/laravel-quickstart
+       update=no
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Copy across new .env file
+  template:
+    src=.env.j2
+    dest=/vagrant/laravel-quickstart/.env
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Install Laravel project dependencies
+  shell: cd /vagrant/laravel-quickstart && COMPOSER_PROCESS_TIMEOUT={{composer_process_timeout}} composer install
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Generate laravel key
+  shell: cd /vagrant/laravel-quickstart && php artisan key:generate
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Execute migrations for the quickstart example
+  shell: cd /vagrant/laravel-quickstart && php artisan migrate
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Copy across new php-fpm pool config for laravel
+  template:
+    src=php-fpm.conf.j2
+    dest=/etc/php/{{ php_version }}/fpm/pool.d/laravel.conf
+  notify:
+    - restart php-fpm
+
+- name: Copy across new virtual host for laravel
+  template:
+    src=nginx.conf.j2
+    dest=/etc/nginx/sites-available/laravel.conf
+  notify:
+    - restart nginx
+
+- name: Enable new vagrant virtual host for laravel
+  file:
+    src=/etc/nginx/sites-available/laravel.conf
+    dest=/etc/nginx/sites-enabled/laravel.conf
+    state=link
+  notify:
+    - restart nginx

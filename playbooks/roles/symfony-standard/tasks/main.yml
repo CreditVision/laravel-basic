@@ -1,0 +1,47 @@
+---
+- name: Create MySQL database for symfony
+  mysql_db: name=symfony state=present
+
+- name: Create MySQL user for symfony
+  mysql_user: name=symfony password=symfony priv=*.*:ALL state=present
+
+- name: Clone Symfony2 standard edition
+  git: repo=https://github.com/symfony/symfony-standard.git
+       dest=/vagrant/symfony-standard
+       update=no
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Copy across new parameters.yml
+  template:
+    src=parameters.yml.j2
+    dest=/vagrant/symfony-standard/app/config/parameters.yml
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Install Symfony2 project dependencies
+  shell: cd /vagrant/symfony-standard && COMPOSER_PROCESS_TIMEOUT={{composer_process_timeout}} composer install
+  become: true
+  become_user: "{{ www_user }}"
+
+- name: Copy across new php-fpm pool config for symfony
+  template:
+    src=php-fpm.conf.j2
+    dest=/etc/php/{{ php_version }}/fpm/pool.d/symfony.conf
+  notify:
+    - restart php-fpm
+
+- name: Copy across new virtual host for symfony
+  template:
+    src=nginx.conf.j2
+    dest=/etc/nginx/sites-available/symfony.conf
+  notify:
+    - restart nginx
+
+- name: Enable new vagrant virtual host for symfony
+  file:
+    src=/etc/nginx/sites-available/symfony.conf
+    dest=/etc/nginx/sites-enabled/symfony.conf
+    state=link
+  notify:
+    - restart nginx
